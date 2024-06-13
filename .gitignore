@@ -2,6 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-.index.html
 
 /.quarto/
+/klima-freiburg_files/
+/index.html

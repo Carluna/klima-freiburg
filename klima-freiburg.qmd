@@ -1,6 +1,5 @@
 ---
 title: "Das Klima in Freiburg"
-author: "R. C. K."
 format: 
   dashboard:
     output-file: index.html
@@ -12,8 +11,11 @@ format:
 ```{r getData}
 require(rdwd)
 require(lubridate)
-require(tidyverse)
 require(plotly)
+require(dplyr)
+require(tidyr)
+require(ggplot2)
+
 
 # get link to DWD station in Freiburg (for temperature and precipitation, hourly)
 link <- selectDWD("Freiburg", res="hourly", var=c("air_temperature", "precipitation"), per="recent")
