@@ -25,9 +25,7 @@ link <- selectDWD("Freiburg", res="hourly", var=c("air_temperature", "precipitat
 file <- dataDWD(link, read = T, varnames = T)
 
 # get current time and data and make sure tz='Berlin/Germany'
-currTime <- as.POSIXct(Sys.time()) |> 
-  with_tz('CET')
-
+currTime <- as.POSIXct(Sys.time()) + 2*60*60 
 
 ```
 ## Row 
