@@ -9,6 +9,7 @@ format:
 ---
 
 ```{r getData}
+require(bit64)
 require(rdwd)
 require(lubridate)
 require(plotly)
