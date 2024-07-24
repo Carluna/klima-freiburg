@@ -465,7 +465,6 @@
         "dplyr",
         "htmltools",
         "htmlwidgets",
-        "igraph",
         "jsonlite",
         "lubridate",
         "magrittr",

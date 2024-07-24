@@ -18,6 +18,7 @@ require(openmeteo)
 require(highcharter)
 require(xts)
 ```
+
 ```{r getData}
 #| context: setup
 #| message: false
