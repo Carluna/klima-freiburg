@@ -14,7 +14,7 @@ jobs:
       contents: write
     steps:
 
-      - name: Install xmllint
+      - name: Install libglpk-dev
         run: sudo apt-get install -y libglpk-dev
     
       - name: Check out repository
