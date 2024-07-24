@@ -8,27 +8,73 @@ format:
         href: https://github.com/carluna/
 ---
 
-```{r getData}
-require(bit64)
-require(rdwd)
+```{r libraries}
+#| context: setup
 require(lubridate)
-require(plotly)
 require(dplyr)
 require(tidyr)
 require(ggplot2)
+require(openmeteo)
+require(highcharter)
+require(xts)
+```
+```{r getData}
+#| context: setup
+#| message: false
+#| warning: false
+#| output: false
+df_now <- weather_now("freiburg", response_units = list(
+                   temperature_unit = "celsius"))
 
+weather_now <- tibble(
+  logo = case_when(
+    df_now$temperature <= 0 ~ 'snowflake',
+    df_now$temperature > 0 & df_now$temperature <= 15 ~ 'temperature-half',
+    df_now$temperature > 15 ~ 'sun'),
+  color = case_when(
+    df_now$temperature <= 0 ~ 'blue',
+    df_now$temperature > 0 & df_now$temperature <= 15 ~ 'yellow',
+    df_now$temperature > 15 ~ 'red'),
+  value = case_when(
+    df_now$temperature <= 0 ~ 'Eisig!',
+    df_now$temperature > 0 & df_now$temperature <= 15 ~ 'Frisch',
+    df_now$temperature > 15 ~ 'Warm!')
+  )
 
-# get link to DWD station in Freiburg (for temperature and precipitation, hourly)
-link <- selectDWD("Freiburg", res="hourly", var=c("air_temperature", "precipitation"), per="recent")
+act_day <- as.Date(with_tz(Sys.Date(), tzone = "Europe/Berlin"))
 
-# download and read DWD data
-file <- dataDWD(link, read = T, varnames = T)
+df <- weather_history("freiburg", 
+                           start = "2000-01-01", 
+                           end = act_day - 1, 
+                           hourly = c("temperature_2m", "precipitation", "pressure_msl"), 
+                           response_units = list(temperature_unit = "celsius",
+                                                 precipitation_unit = "mm")
+                           ) |> 
+  na.omit() |> 
+  rename(date = datetime,
+         Temperatur = hourly_temperature_2m,
+         Niederschlag = hourly_precipitation,
+         Luftdruck = hourly_pressure_msl)
 
-# get current time and data and make sure tz='Berlin/Germany'
-currTime <- as.POSIXct(Sys.time()) + 2*60*60 
+df_recent <- df |> 
+  filter(as.Date(date) >= act_day - 5) |> 
+  rename(Datum = date) |>
+  group_by(Datum = as.Date(Datum)) |> 
+  reframe(temp_min = min(Temperatur, na.rm = T),
+          temp_mean = round(mean(Temperatur, na.rm = T), digits = 2),
+          temp_max = max(Temperatur, na.rm = T),
+          Niederschlag = sum(Niederschlag, na.rm = T),
+          ldruck_mean = round(mean(Luftdruck, na.rm = T), digits = 2),
+          ldruck_min = min(Luftdruck, na.rm = T),
+          ldruck_max = max(Luftdruck, na.rm = T)) |> 
+  ungroup()
 
 ```
-## Row 
+
+
+
+# Aktuell
+## Row {height=40%}
 
 ```{r}
 #| content: valuebox
@@ -36,7 +82,7 @@ currTime <- as.POSIXct(Sys.time()) + 2*60*60
 list(
   icon = "calendar-check",
   color = "light",
-  value = as.Date(currTime)
+  value = act_day
 )
 ```
 
@@ -46,39 +92,221 @@ list(
 list(
   icon = "clock",
   color = "light",
-  value = strftime(currTime, format="%H:%M")
+  value = strftime(with_tz(Sys.time(), tzone = "Europe/Berlin"), format="%H:%M")
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Wetter"
+list(
+  icon = weather_now$logo,
+  color = weather_now$color,
+  value = weather_now$value
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Temperatur"
+list(
+  color = weather_now$color,
+  value = paste0(df_now$temperature, "°C")
 )
 ```
 
 
-## Column 
-```{r wrangleData}
-df <- file$hourly_air_temperature_recent_stundenwerte_TU_01443_akt |> 
-  left_join(file$hourly_precipitation_recent_stundenwerte_RR_01443_akt, by = "MESS_DATUM") |> 
-  select(-c(eor.y,QN_8,QN_9,eor.x,STATIONS_ID.y)) |> 
-  pivot_longer(cols = -c(STATIONS_ID.x, MESS_DATUM))
-
-time_period <- c(as.Date(currTime)-5, as.Date(currTime))
-
-df_plot <- df |> 
-  filter(MESS_DATUM >= time_period[1]) |> 
-  mutate(name = case_when(
-    name == 'TT_TU.Lufttemperatur' ~ 'Lufttemperatur (°C)',
-    name == 'RF_TU.Relative_Feuchte' ~ 'Relative Feuchte (%)',
-    name == 'R1.Niederschlagshoehe' ~ 'Niederschlagshöhe (mm)',
-    name == 'RS_IND.Niederschlagsindikator' ~ 'Niederschlagsindikator',
-    name == 'WRTR.Niederschlagsform' ~ 'Niederschlagsform'
-  )) |> 
-  filter(name == 'Lufttemperatur (°C)' | 
-           name == 'Relative Feuchte (%)' |
-           name == 'Niederschlagshöhe (mm)') |> 
-  rename(Datum = MESS_DATUM,
-         Wert = value)
-
-ggplotly(
-  ggplot(data = df_plot) + 
-    geom_line(aes(x = Datum, y = Wert)) + 
-    facet_wrap(~name, scales = 'free_y') +
-    theme_bw()
-)
+## Row {height=60%} 
+```{r plotRecent1}
+#| title: Temperatur (°C)
+hchart(
+  df_recent, 
+  type = "errorbar",
+  hcaes(
+    x = Datum, 
+    low = temp_min, 
+    high = temp_max),
+  name = "Minimale und maximale Temperatur"
+  ) |> 
+  hc_add_series(df_recent, 
+    type = "line",
+    hcaes(
+      x = Datum, 
+      y = temp_mean),
+      color = "red",
+    name = "Mittlere Temperatur"
+    ) |> 
+   hc_tooltip(
+    crosshairs = TRUE,
+    backgroundColor = "#F0F0F0",
+    shared = TRUE, 
+    borderWidth = 1
+    )
 ```
+
+```{r plotRecent2}
+#| title: Niederschlag (mm)
+hchart(
+  df_recent, 
+  "column",
+  hcaes(x = Datum, y = Niederschlag)
+  )
+```
+
+
+```{r plotRecent3}
+#| title: Luftdruck (hPa)
+hchart(
+  df_recent, 
+  type = "errorbar",
+  hcaes(
+    x = Datum, 
+    low = ldruck_min, 
+    high = ldruck_max),
+  name = "Minimaler und maximaler Luftdruck"
+  ) |> 
+  hc_add_series(df_recent, 
+    type = "line",
+    hcaes(
+      x = Datum, 
+      y = ldruck_mean),
+      color = "orange",
+    name = "Mittlerer Luftdruck"
+    ) |> 
+   hc_tooltip(
+    crosshairs = TRUE,
+    backgroundColor = "#F0F0F0",
+    shared = TRUE, 
+    borderWidth = 1
+    )
+```
+
+# Vorhersage
+
+```{r}
+#| warning: false
+#| output: false
+forecast <- weather_forecast("freiburg", 
+                 hourly = c("temperature_2m", "precipitation"), 
+                 response_units = list(
+                   temperature_unit = "celsius",
+                   precipitation_unit = "mm")
+                 )  |> 
+  rename(date = datetime,
+         Temperatur = hourly_temperature_2m,
+         Niederschlag = hourly_precipitation) 
+
+forecast_temp <- forecast |> 
+  select(-Niederschlag) |> 
+  as.xts()
+
+forecast_prec <- forecast |> 
+  select(-Temperatur) |> 
+  as.xts()
+```
+
+```{r}
+highchart(type = "stock") |> 
+  hc_yAxis_multiples(create_yaxis(2, height = c(2, 1), turnopposite = TRUE)) |> 
+  hc_add_series(forecast_temp, yAxis = 0, name = "Temperatur (°C)", color = "red") |> 
+  hc_add_series(forecast_prec, yAxis = 1, type = "column", name = "Niederschlag (mm)", color = "blue") |> 
+  hc_tooltip(valueDecimals = 2)
+```
+
+
+
+# Statistik
+
+## Row
+
+```{r getMeans}
+#| context: setup
+
+df_hist <- df |> 
+  filter(date < act_day) |> 
+  select(-Luftdruck) |> 
+  group_by(date = as.Date(date)) |> 
+  reframe(temp_min = min(Temperatur, na.rm = T),
+          temp_mean = round(mean(Temperatur, na.rm = T), digits = 2),
+          temp_max = max(Temperatur, na.rm = T),
+          prec = sum(Niederschlag, na.rm = T)) |> 
+  ungroup()
+
+df_last_year <- df_hist |> 
+  filter(year(date) == year(act_day)-1)
+```
+
+```{r}
+x <- c("Min", "Mean", "Max")
+y <- sprintf("{point.%s}°", c("temp_min", "temp_mean", "temp_max"))
+
+tltip <- tooltip_table(x, y)
+
+hchart(
+  df_last_year,
+  type = "columnrange",
+  hcaes(
+    x = date, 
+    low = temp_min, 
+    high = temp_max,
+    color = temp_mean
+    )
+  ) |> 
+  hc_chart(
+    polar = TRUE
+    ) |>
+  hc_yAxis(
+    max = 40,
+    min = -10,
+    labels = list(format = "{value} C"),
+    showFirstLabel = FALSE
+  ) |>
+  hc_xAxis(
+    title = list(text = ""), 
+    gridLineWidth = 0.5,
+    labels = list(format = "{value: %b}")
+  ) |>
+  hc_tooltip(
+    useHTML = TRUE,
+    pointFormat = tltip,
+    headerFormat = as.character(tags$small("{point.x:%d %B, %Y}")),
+    valueDecimals = 2
+  ) |> 
+  hc_title(
+    text = paste0("Temperatur (°C) im Jahr ", unique(year(df_last_year$date)))
+    )
+
+```
+
+```{r}
+x <- c("Niederschlag")
+y <- sprintf("{point.%s}mm", c("prec"))
+
+tltip <- tooltip_table(x, y)
+
+hchart(df_last_year, hcaes(x = date, low = 0, high = prec), type = "columnrange", name = "Niederschlag (mm)", color = "blue") |> 
+  hc_chart(
+    polar = TRUE
+    ) |>
+  hc_yAxis(
+    max = 40,
+    min = -10,
+    labels = list(format = "{value} mm"),
+    showFirstLabel = FALSE
+  ) |>
+  hc_xAxis(
+    title = list(text = ""), 
+    gridLineWidth = 0.5,
+    labels = list(format = "{value: %b}")
+  ) |>
+  hc_tooltip(
+    useHTML = TRUE,
+    pointFormat = tltip,
+    headerFormat = as.character(tags$small("{point.x:%d %B, %Y}")),
+    valueDecimals = 2
+  ) |> 
+  hc_title(
+    text = paste0("Niederschlagsumme (mm) im Jahr ", unique(year(df_last_year$date)))
+    )
+```
+
