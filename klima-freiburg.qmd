@@ -6,8 +6,19 @@ format:
     nav-buttons:
       - icon: github
         href: https://github.com/carluna/klima-freiburg
-    theme: styles.scss
 ---
+
+```{=html}
+<style>
+.quarto-dashboard .bslib-value-box .value-box-value {
+    font-size: clamp(.1em,4cqw,3em)!important;
+}
+
+.bslib-value-box .value-box-title {
+    font-size: clamp(.1em, 5cqw, 5em) !important;
+}
+</style>
+```
 
 ```{r libraries}
 #| context: setup
@@ -66,6 +77,7 @@ df_recent <- df |>
 
 # Aktuell
 ## Row {height=20%}
+
 
 ```{r}
 #| content: valuebox
