@@ -1,0 +1,13 @@
+/*-- scss:defaults --*/
+
+
+
+/*-- scss:rules --*/
+
+.quarto-dashboard .bslib-value-box .value-box-value {
+    font-size: clamp(.1em,4cqw,3em)!important;
+}
+
+.bslib-value-box .value-box-title {
+    font-size: clamp(.1em, 5cqw, 5em) !important;
+}
