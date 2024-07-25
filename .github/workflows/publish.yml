@@ -3,7 +3,7 @@ on:
   push:
     branches: main
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '0 */6 * * *'
 
 name: Quarto Publish
 
@@ -13,9 +13,6 @@ jobs:
     permissions:
       contents: write
     steps:
-
-      - name: Install libglpk-dev
-        run: sudo apt-get install -y libglpk-dev
     
       - name: Check out repository
         uses: actions/checkout@v4

@@ -5,7 +5,8 @@ format:
     output-file: index.html
     nav-buttons:
       - icon: github
-        href: https://github.com/carluna/
+        href: https://github.com/carluna/klima-freiburg
+    theme: styles.scss
 ---
 
 ```{r libraries}
@@ -15,8 +16,7 @@ require(dplyr)
 require(tidyr)
 require(ggplot2)
 require(openmeteo)
-require(highcharter)
-require(xts)
+require(echarts4r)  
 ```
 
 ```{r getData}
@@ -59,31 +59,20 @@ df <- weather_history("freiburg",
 
 df_recent <- df |> 
   filter(as.Date(date) >= act_day - 5) |> 
-  rename(Datum = date) |>
-  group_by(Datum = as.Date(Datum)) |> 
-  reframe(temp_min = min(Temperatur, na.rm = T),
-          temp_mean = round(mean(Temperatur, na.rm = T), digits = 2),
-          temp_max = max(Temperatur, na.rm = T),
-          Niederschlag = sum(Niederschlag, na.rm = T),
-          ldruck_mean = round(mean(Luftdruck, na.rm = T), digits = 2),
-          ldruck_min = min(Luftdruck, na.rm = T),
-          ldruck_max = max(Luftdruck, na.rm = T)) |> 
-  ungroup()
-
+  rename(Datum = date)
 ```
 
 
 
 # Aktuell
-## Row {height=40%}
+## Row {height=20%}
 
 ```{r}
 #| content: valuebox
 #| title: "Datum"
 list(
-  icon = "calendar-check",
   color = "light",
-  value = act_day
+  value = strftime(act_day, format = "%d.%m")
 )
 ```
 
@@ -91,9 +80,8 @@ list(
 #| content: valuebox
 #| title: "Uhrzeit des letzten Updates"
 list(
-  icon = "clock",
   color = "light",
-  value = strftime(with_tz(Sys.time(), tzone = "Europe/Berlin"), format="%H:%M")
+  value = strftime((with_tz(Sys.time(), tzone = "Europe/Berlin") + 2*60*60), format="%H:%M")
 )
 ```
 
@@ -101,7 +89,6 @@ list(
 #| content: valuebox
 #| title: "Wetter"
 list(
-  icon = weather_now$logo,
   color = weather_now$color,
   value = weather_now$value
 )
@@ -117,69 +104,42 @@ list(
 ```
 
 
-## Row {height=60%} 
+## Row {height=80%} 
 ```{r plotRecent1}
 #| title: Temperatur (°C)
-hchart(
-  df_recent, 
-  type = "errorbar",
-  hcaes(
-    x = Datum, 
-    low = temp_min, 
-    high = temp_max),
-  name = "Minimale und maximale Temperatur"
-  ) |> 
-  hc_add_series(df_recent, 
-    type = "line",
-    hcaes(
-      x = Datum, 
-      y = temp_mean),
-      color = "red",
-    name = "Mittlere Temperatur"
-    ) |> 
-   hc_tooltip(
-    crosshairs = TRUE,
-    backgroundColor = "#F0F0F0",
-    shared = TRUE, 
-    borderWidth = 1
-    )
+
+avg <- list(
+  type = "average",
+  name = "AVG"
+)
+
+df_recent |> 
+  e_charts(Datum) |> 
+  e_line(Temperatur) |>  
+  e_mark_line(data =avg) |>
+  e_legend(FALSE) |> 
+  e_tooltip(trigger = "axis") |> 
+  e_visual_map(Temperatur, orient = "horizontal", align = "bottom")  
 ```
 
 ```{r plotRecent2}
 #| title: Niederschlag (mm)
-hchart(
-  df_recent, 
-  "column",
-  hcaes(x = Datum, y = Niederschlag)
-  )
+df_recent |> 
+  e_charts(Datum) |> 
+  e_bar(Niederschlag) |>  
+  e_legend(FALSE) |> 
+  e_tooltip(trigger = "axis") |> 
+  e_visual_map(Niederschlag, orient = "horizontal", align = "bottom") 
 ```
 
 
 ```{r plotRecent3}
 #| title: Luftdruck (hPa)
-hchart(
-  df_recent, 
-  type = "errorbar",
-  hcaes(
-    x = Datum, 
-    low = ldruck_min, 
-    high = ldruck_max),
-  name = "Minimaler und maximaler Luftdruck"
-  ) |> 
-  hc_add_series(df_recent, 
-    type = "line",
-    hcaes(
-      x = Datum, 
-      y = ldruck_mean),
-      color = "orange",
-    name = "Mittlerer Luftdruck"
-    ) |> 
-   hc_tooltip(
-    crosshairs = TRUE,
-    backgroundColor = "#F0F0F0",
-    shared = TRUE, 
-    borderWidth = 1
-    )
+# df_recent |> 
+#   e_charts(Datum) |> 
+#   e_line(Luftdruck) |>  
+#   e_legend(FALSE) |> 
+#   e_tooltip(trigger = "axis") 
 ```
 
 # Vorhersage
@@ -194,24 +154,25 @@ forecast <- weather_forecast("freiburg",
                    precipitation_unit = "mm")
                  )  |> 
   rename(date = datetime,
-         Temperatur = hourly_temperature_2m,
-         Niederschlag = hourly_precipitation) 
+         "Temperatur (°C)" = hourly_temperature_2m,
+         "Niederschlag (mm)" = hourly_precipitation) 
 
-forecast_temp <- forecast |> 
-  select(-Niederschlag) |> 
-  as.xts()
-
-forecast_prec <- forecast |> 
-  select(-Temperatur) |> 
-  as.xts()
 ```
 
 ```{r}
-highchart(type = "stock") |> 
-  hc_yAxis_multiples(create_yaxis(2, height = c(2, 1), turnopposite = TRUE)) |> 
-  hc_add_series(forecast_temp, yAxis = 0, name = "Temperatur (°C)", color = "red") |> 
-  hc_add_series(forecast_prec, yAxis = 1, type = "column", name = "Niederschlag (mm)", color = "blue") |> 
-  hc_tooltip(valueDecimals = 2)
+
+forecast |> 
+  e_charts(date) |> 
+  e_line(`Temperatur (°C)`, x_index = 1, y_index = 1) |>  
+  e_bar(`Niederschlag (mm)`) |> 
+  e_grid(height = "35%") |> 
+  e_grid(height = "35%", top = "50%") |> 
+  e_y_axis(gridIndex = 1) |> 
+  e_x_axis(gridIndex = 1) |> 
+  e_tooltip(trigger = "axis") |> 
+  e_datazoom(x_index = c(0, 1)) |> 
+  e_color(color = c("red", "blue"))
+
 ```
 
 
@@ -234,80 +195,52 @@ df_hist <- df |>
   ungroup()
 
 df_last_year <- df_hist |> 
-  filter(year(date) == year(act_day)-1)
+  filter(year(date) == year(act_day) - 1)
+
+df_hist_mean <- df_hist |> 
+  filter(year(date) < year(act_day) - 2 & year(date) >= 2000) |> 
+  group_by(month = month(date), day = day(date)) |> 
+  summarise(
+    temp_min = round(mean(temp_min, na.rm = T), digits = 2),
+    temp_mean = round(mean(temp_mean, na.rm = T), digits = 2),
+    temp_max = round(mean(temp_max, na.rm = T), digits = 2),
+    prec = round(mean(prec, na.rm = T), digits = 2)) |> 
+  ungroup() |> 
+  mutate(date = as.Date(paste0("2000-", month, "-", day)))
 ```
 
 ```{r}
-x <- c("Min", "Mean", "Max")
-y <- sprintf("{point.%s}°", c("temp_min", "temp_mean", "temp_max"))
-
-tltip <- tooltip_table(x, y)
-
-hchart(
-  df_last_year,
-  type = "columnrange",
-  hcaes(
-    x = date, 
-    low = temp_min, 
-    high = temp_max,
-    color = temp_mean
-    )
-  ) |> 
-  hc_chart(
-    polar = TRUE
-    ) |>
-  hc_yAxis(
-    max = 40,
-    min = -10,
-    labels = list(format = "{value} C"),
-    showFirstLabel = FALSE
-  ) |>
-  hc_xAxis(
-    title = list(text = ""), 
-    gridLineWidth = 0.5,
-    labels = list(format = "{value: %b}")
-  ) |>
-  hc_tooltip(
-    useHTML = TRUE,
-    pointFormat = tltip,
-    headerFormat = as.character(tags$small("{point.x:%d %B, %Y}")),
-    valueDecimals = 2
-  ) |> 
-  hc_title(
-    text = paste0("Temperatur (°C) im Jahr ", unique(year(df_last_year$date)))
-    )
-
+ggplot(data = df_last_year) +
+  coord_polar() +
+  geom_linerange(aes(ymin = temp_min, ymax = temp_max, x = date, color = temp_mean)) +
+  scale_x_date(date_breaks =  "1 month", date_labels = "%b") +
+  scale_color_viridis_c(name = paste0("Mittlere Temperatur (°C) im Jahr ", unique(year(df_last_year$date)))) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        legend.position = "bottom",
+        legend.title.position = "top",
+        legend.title.align = 0.5,
+        legend.box.just = "center",
+        axis.title = element_blank())
+```
+```{r}
+ggplot(data = df_hist_mean) +
+  coord_polar() +
+  geom_linerange(aes(ymin = temp_min, ymax = temp_max, x = date, color = temp_mean)) +
+  scale_x_date(date_breaks =  "1 month", date_labels = "%b") +
+  scale_color_viridis_c(name = paste0("Mittlere Temperatur (°C) von ", min(year(df_hist_mean$date)), " bis ",  max(year(df_hist_mean$date)))) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        legend.position = "bottom",
+        legend.title.position = "top",
+        legend.title.align = 0.5,
+        legend.box.just = "center",
+        axis.title = element_blank())
 ```
 
+## Row
+
 ```{r}
-x <- c("Niederschlag")
-y <- sprintf("{point.%s}mm", c("prec"))
 
-tltip <- tooltip_table(x, y)
-
-hchart(df_last_year, hcaes(x = date, low = 0, high = prec), type = "columnrange", name = "Niederschlag (mm)", color = "blue") |> 
-  hc_chart(
-    polar = TRUE
-    ) |>
-  hc_yAxis(
-    max = 40,
-    min = -10,
-    labels = list(format = "{value} mm"),
-    showFirstLabel = FALSE
-  ) |>
-  hc_xAxis(
-    title = list(text = ""), 
-    gridLineWidth = 0.5,
-    labels = list(format = "{value: %b}")
-  ) |>
-  hc_tooltip(
-    useHTML = TRUE,
-    pointFormat = tltip,
-    headerFormat = as.character(tags$small("{point.x:%d %B, %Y}")),
-    valueDecimals = 2
-  ) |> 
-  hc_title(
-    text = paste0("Niederschlagsumme (mm) im Jahr ", unique(year(df_last_year$date)))
-    )
 ```
 
